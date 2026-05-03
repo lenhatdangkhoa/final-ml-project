@@ -60,6 +60,98 @@ sh ./scripts/multivariate_forecast/ETTh1_script/DUET.sh
 ```
 
 
+## Changes in This Repository
+
+Compared to the original DUET codebase, this repository adds a local temporal residual branch and helper scripts for large-scale reruns.
+
+1. Local branch in DUET model
+
+- File: `ts_benchmark/baselines/duet/models/duet_model.py`
+- Added optional local temporal path:
+  - depthwise `Conv1d` on time dimension (per channel),
+  - projection from input length `L` to horizon `H`,
+  - residual fusion with DUET output using learnable `local_alpha`.
+- New hyperparameters:
+  - `use_local_branch` (bool)
+  - `local_kernel_size` (int)
+  - `local_alpha` (float)
+
+2. Training stability fix for multi-GPU DataParallel
+
+- File: `ts_benchmark/baselines/duet/duet.py`
+- When using multi-GPU (`--gpus 0 1 ...`), auxiliary `loss_importance` can be returned per device.
+- Added scalar reduction before backward to avoid:
+  - `RuntimeError: grad can be implicitly created only for scalar outputs`
+
+3. Added experiment helper scripts
+
+- `scripts/run_duet_local_branch_all.py`  
+  Run DUET + local branch across all dataset scripts and collect a summary CSV.
+- `scripts/rerun_missing_duet_localbranch.py`  
+  Re-run only missing `(dataset, horizon)` results.
+- `scripts/rerun_traffic_localbranch.py`  
+  Re-run local-branch experiments for Traffic.
+
+
+## How to Run
+
+### A) Run original DUET script (baseline)
+
+```shell
+sh ./scripts/multivariate_forecast/ETTh1_script/DUET.sh
+```
+
+### B) Run DUET + local branch for one dataset/horizon
+
+Example: Traffic, horizon 96.
+
+```shell
+python ./scripts/run_benchmark.py \
+  --config-path "rolling_forecast_config.json" \
+  --data-name-list "Traffic.csv" \
+  --strategy-args '{"horizon": 96}' \
+  --model-name "duet.DUET" \
+  --model-hyper-params '{"CI": 1, "batch_size": 32, "d_ff": 1024, "d_model": 512, "dropout": 0, "e_layers": 4, "factor": 3, "fc_dropout": 0, "horizon": 96, "k": 2, "loss": "MAE", "lr": 0.0005, "lradj": "type1", "n_heads": 1, "norm": true, "normalization": true, "num_epochs": 10, "num_experts": 4, "patch_len": 48, "patience": 3, "seq_len": 336, "use_local_branch": true, "local_kernel_size": 5, "local_alpha": 0.1}' \
+  --deterministic "full" \
+  --gpus 0 \
+  --num-workers 1 \
+  --timeout 60000 \
+  --save-path "Traffic/DUET_localbranch_all"
+```
+
+Output report files are saved under:
+
+```shell
+result/Traffic/DUET_localbranch_all/test_report*.csv
+```
+
+### C) Run DUET + local branch on all datasets
+
+```shell
+python scripts/run_duet_local_branch_all.py \
+  --gpus "0,1" \
+  --max-parallel 2 \
+  --save-path-suffix DUET_localbranch_all
+```
+
+### D) Re-run only missing experiments
+
+```shell
+python scripts/rerun_missing_duet_localbranch.py \
+  --gpus "0,1" \
+  --max-parallel 2 \
+  --save-path-suffix DUET_localbranch_all
+```
+
+### E) Traffic-only rerun helper
+
+```shell
+python scripts/rerun_traffic_localbranch.py \
+  --gpus "0,1" \
+  --max-parallel 2 \
+  --save-suffix DUET_localbranch_all
+```
+
 
 ## Results
 We utilize the Time Series Forecasting Benchmark ([TFB](https://github.com/decisionintelligence/TFB)) code repository as a unified evaluation framework, providing access to **all baseline codes, scripts, and results**. Following the settings in TFB, we do not apply the **"Drop Last"** trick to ensure a fair comparison.
