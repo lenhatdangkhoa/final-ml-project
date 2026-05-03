@@ -1,7 +1,8 @@
 dataset/
-result/
 .idea/
 .vscode/
 .git
 *.DS_Store
-venv/
+.venv/
+sleep-cassette/*
+sleep-telemetry/*

@@ -50,6 +50,9 @@ DEFAULT_TRANSFORMER_BASED_HYPER_PARAMS = {
     "noisy_gating": True,
     "k": 1,
     "CI": True,
+    "use_local_branch": True,
+    "local_kernel_size": 5,
+    "local_alpha": 0.1,
     "parallel_strategy": "DP",
 }
 
@@ -331,6 +334,9 @@ class DUET(ModelBase):
                 output = output[:, -config.horizon :, :]
                 loss = criterion(output, target)
 
+                # DataParallel may return per-device auxiliary losses; reduce to scalar.
+                if isinstance(loss_importance, torch.Tensor) and loss_importance.ndim > 0:
+                    loss_importance = loss_importance.mean()
                 total_loss = loss + loss_importance
                 total_loss.backward()
 
